@@ -4,7 +4,6 @@ from fastapi.exceptions import RequestValidationError
 import json
 import requests
 from configparser import ConfigParser
-from pydantic import BaseModel
 
 app = FastAPI()
 
