@@ -1,6 +1,9 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 
+import torch
+from transformers import pipeline
+
 import json
 import requests
 from configparser import ConfigParser
@@ -9,6 +12,16 @@ app = FastAPI()
 
 parser = ConfigParser()
 parser.read('/etc/auth.conf')
+access_token = parser.get('huggingface', 'read_token')
+
+model_id = "meta-llama/Llama-3.2-1B-Instruct"
+pipe = pipeline(
+    "text-generation",
+    model=model_id,
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    token=access_token
+)
 
 session = requests.Session()
 webhook_url = "https://webexapis.com/v1/webhooks"
@@ -41,7 +54,17 @@ def send_message(resp_text, command):
     if command == 'kenobi':
         message = 'General Kenobi!'
     else:
-        message = 'Time to abandon ship!'
+        prompt = resp_text['text'] + "\n limit your response in 3 sentence"
+        messages = [
+            {"role": "system", "content": "You are General Grievous from Star Wars Revenge of the Sith"},
+            {"role": "user", "content": prompt},
+        ]
+        outputs = pipe(
+            messages,
+            max_new_tokens=128,
+        )
+        message = outputs[0]["generated_text"][-1]["content"]
+#        message = 'Time to abandon ship!'
 
     request_payload = { 'roomId': resp_text['roomId'], 'text': message }
     send_session = session.post(message_url, headers=webhook_request_header, json=request_payload)
@@ -66,7 +89,7 @@ async def webexhook(webex: Request):
             msg_session = send_message(message, 'kenobi')
         else:
             msg_session = send_message(message, 'random')
-  
+
     return {"message": "got your post!"}
 
 
